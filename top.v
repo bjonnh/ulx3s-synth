@@ -6,119 +6,112 @@ module top(input clk_25mhz,
            output [7:0] led,
            output 	wifi_gpio0);
 
-  wire i_clk;
+    wire i_clk;
 
     // Tie GPIO0, keep board from rebooting
-   assign wifi_gpio0 = 1'b1;
-   assign i_clk= clk_25mhz;
-   reg [7:0] o_led;
-   reg [7:0]  byteValue;
+    assign wifi_gpio0 = 1'b1;
+    assign i_clk= clk_25mhz;
+    reg [7:0] o_led;
+    reg [7:0]  byteValue;
    
     assign led= o_led;
 
-    reg [23:0] noteTicks;
+    wire [23:0] noteTicks;
     reg [7:0] modulationValue;
     reg note_on;
-   reg 	byte_ready;
-   reg 	debug;
-   reg 	waiting;
-   reg 	signal;
-   reg 	complete;
+    reg    byte_ready;
+    reg    debug;
+    reg    waiting;
+    reg    signal;
+    reg    complete;
 
 
-   reg 	note_on;
-   reg [23:0] noteTicks;
+    reg        note_on;
+    reg [23:0] noteTicks;
 
-   reg signed [15:0] l,r;
-   reg 	      phase_state = 0;
-   reg [23:0] counter = 0;
-   
-    wire [11:0] pcm_trianglewave;
-    // triangle wave generator /\/\/
-    trianglewave trianglewave_instance
-    (
-      .clk(clk_25mhz),
-      .noteTicks(noteTicks),
-      .pcm(pcm_trianglewave)
-    );
+    reg [23:0] l,r;
+
+    MidiProcessor midiprocessor(i_clk, gp[0], note_on, noteTicks, modulationValue, debug);
+
+    wire din, lrclk, bclk, audioclk;
+
+    wire [23:0] audio;
+    reg [23:0] factor;
+
+    //SquareWave square_wave(audioclk, noteTicks, audio);
+    SineWave sine_wave(bclk, noteTicks, audio);
+    ADSR adsr(lrclk, note_on, factor);
 
 
-   
-MidiProcessor midiprocessor(
-	i_clk,
-	gp[0],
-	note_on,
-	noteTicks,
-	modulationValue,
-	debug		  
-);
+    I2Seasy i2s_instance
+       (
+      .sclk(i_clk),  // input 25MHz
+      .bclk(bclk),   // output i_clk/4
+      .lrclk(lrclk),         // output 97.6565 KHz
+      .audioclk(audioclk), // output lrclk/2
+      .loutData(din), // output
+      .inLeft(l), // input
+      .inRight(r), // input
+      );
 
-   i2s_v i2s_out(i_clk, l, r, gn[0], gn[1], gn[2] );
-   
-assign   gn[3] = i_clk;
- wire [11:0] pcm = pcm_trianglewave;
-   wire [23:0] pcm_24s;
-    assign pcm_24s[23] = pcm[11];
-    assign pcm_24s[22:11] = pcm;
-    assign pcm_24s[10:0] = 11'b0;
+     assign gn[0] = din;
+     assign gn[1] = bclk;
+     assign gn[2] = lrclk;
+     assign gn[3] = clk_25mhz;
 
-//MidiByteReader midiByteReader(i_clk, gp[0], byte_ready, byteValue, debug,waiting, signal, complete);
+    always @(posedge i_clk) begin
+      o_led[0] <= note_on;
 
-always @(posedge i_clk) begin
-  o_led[0] <= note_on;
+      r <= $signed(audio * factor) * note_on;
+      l <= $signed(audio * factor) * note_on;
 
-   l <= pcm_24s[23:8] * note_on;
-   r <= pcm_24s[23:8]  * note_on;
- 
-   
-  if (counter == 0)
-    begin
-       if (phase_state == 1'b1)
-	 phase_state <= 1'b0;
-       else
-	 phase_state <= 1'b1;
+    end
+endmodule // top
 
-    counter <= 5000;
-    end   
-   
-  else 
-    counter <= counter - 1'b1;
-
-   
-   
-   
-end // always @ (posedge i_clk)
-
+module SquareWave(input clk, input [23:0] noteTicks, output [23:0] audio);
+   wire clockaudio;
+   wire [23:0] noteTicks;
+   wire [23:0] audio= clockaudio ? 24'b1111111111111111111 : 24'b0;
+   Clock_divider clockdivider_for_audioclk ( .clock_in(clk), .clock_out(clockaudio), .div(noteTicks) );
 endmodule
 
-module trianglewave
-#(
-  parameter C_pcm_bits = 12 // how many bits for PCM output
-)
-(
-  input 			 clk, // required to run PWM
-  input [23:0] noteTicks,
-  output signed [C_pcm_bits-1:0] pcm // 12-bit unsigned PCM output
-);
+module SineWave(input clk, input [23:0] noteTicks, output [23:0] audio);
+    wire clk;
+    reg [23:0] table [1023:0];
+    initial $readmemh("sine.mem", table);
+    reg[9:0] phase;
+    wire [23:0] audio;
 
-    reg [32+C_pcm_bits-1:0] R_counter; // PWM counter register
-    reg R_direction;
-    
-    always @(posedge clk)
-    begin
-      if(R_direction == 1'b1)
-        R_counter <= R_counter + 1;
-      else
-        R_counter <= R_counter - 1;
-    end
+    wire  clockaudio;
 
-    always @(posedge clk)
-    begin
-      if( R_counter[noteTicks+C_pcm_bits-1:noteTicks] == ~{12'd1770} && R_direction == 1'b0)
-        R_direction <= 1'b1; // from now on, count forwards
-      if( R_counter[noteTicks+C_pcm_bits-1:noteTicks] == 12'd1770 && R_direction == 1'b1)
-        R_direction <= 1'b0; // from now on, count backwards
+    Clock_divider clockdivider_for_audioclk ( .clock_in(clk), .clock_out(clockaudio), .div(noteTicks) );
+    always @(negedge clockaudio) begin
+       phase <= phase+1;
+       audio <= table[phase];
+
     end
-    
-    assign pcm = R_counter[noteTicks+C_pcm_bits-1:noteTicks];
+endmodule
+
+module ADSR(input clk, input gate, output [23:0] factor);
+   wire clk;
+   reg[8:0] phase;
+   wire [23:0] factor;
+   wire        gate;
+
+
+
+   Clock_divider clockdivider_for_audioclk ( .clock_in(clk), .clock_out(clockaudio), .div(9) ); // need to recalibrate that
+//   always @(posedge gate) begin
+ //     phase <= 0;
+  // end
+
+   always @(posedge clkaudio) begin
+      if (phase == 255)
+                phase = 0;
+
+      phase <= phase +1;
+      factor <= phase;
+
+   end
+
 endmodule

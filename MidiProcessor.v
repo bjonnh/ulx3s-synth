@@ -20,7 +20,10 @@ reg [7:0] controllerNumber = 0;
 wire isByteAvailable;
 wire [7:0] byteValue;
 wire [23:0] sampleTicks;
-wire detected_bit;
+
+
+reg [127:0] noteRegister;
+
 
 MidiByteReader midiByteReader(clk, MIDI_RX, isByteAvailable, byteValue);
 MidiNoteNumberToSampleTicks midiNoteNumberToSampleTicks(midiNoteNumber, sampleTicks);
@@ -66,11 +69,11 @@ begin
 			case (status)
 				4'h8:  // Note Off
 					if (dataBytesReceivedCount == 2)
-						begin
-							if (midiNoteNumber == dataByte0)
+					    begin
 								begin
 									dataBytesReceivedCount <= 0;
-									isNoteOn <= 1'b0;
+								    noteRegister[dataByte0] <= 0;
+									//isNoteOn <= 1'b0;
 								end
 						end
 				4'h9:  // Note On
@@ -84,11 +87,13 @@ begin
 								if (dataByte1 == 0)
 									begin
 										// Zero velocity is like Note Off
-										isNoteOn <= 1'b0;										
+										//isNoteOn <= 1'b0;
+     								    noteRegister[dataByte0] <= 0;
 									end
 								else
 									begin
-										isNoteOn <= 1'b1;
+										//isNoteOn <= 1'b1;
+     								    noteRegister[dataByte0] <= 1;
 										noteSampleTicks <= sampleTicks;
 									end
 							end
@@ -107,7 +112,10 @@ begin
 							end
 					endcase
 			endcase
-		end
+		end // if (isDataByteAvailable == 1'b1)
+
+   isNoteOn <= $countones(noteRegister) > 0;
+
 end
 
 endmodule

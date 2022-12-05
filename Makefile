@@ -15,8 +15,11 @@ ulx3s_out.config: midisynth.json
 MidiNoteNumberToSampleTicks.v: NoteSampleTicks.py
 	python NoteSampleTicks.py > MidiNoteNumberToSampleTicks.v
 
-midisynth.json: midisynth.ys top.v MidiByteReader.v MidiNoteNumberToSampleTicks.v MidiProcessor.v i2s.v
+midisynth.json: midisynth.ys top.v clock.v MidiByteReader.v MidiNoteNumberToSampleTicks.v MidiProcessor.v i2s.v hdl/sv/ecp5pll.sv sine.mem
 	yosys midisynth.ys
+
+sine.mem: gen_sine.py
+	python gen_sine.py
 
 prog: ulx3s.bit
 	fujprog ulx3s.bit

@@ -1,0 +1,9 @@
+.DS_Store
+.idea
+*.log
+tmp/
+\#*
+*~
+ulx3s.bit
+midisynth.json
+ulx3s_out.config

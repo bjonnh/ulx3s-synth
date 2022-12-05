@@ -1,43 +1,88 @@
-module i2s_v
-#(
-  parameter    fmt = 1,            // 0:i2s standard, 1:left justified
-  parameter    clk_hz  = 25000000, // Hz input clock frequency
-  parameter    lrck_hz = 44100     // Hz output PCM frequency
-)
-(
-  input        clk,  // 25-100 MHz
-  input [15:0] l,r,  // PCM 16-bit signed
-  output       din,  // pin on pcm5102 data
-  output       bck,  // pin on pcm5102 bit clock
-  output       lrck  // pin on pcm5102 L/R clock
-);
-  parameter c_pa_bits = 32; // number of bits in phase accumulator
-  parameter [63:0] pa_inc = 2**(c_pa_bits+5) * lrck_hz / clk_hz;
-  parameter [c_pa_bits-2:0] c_pa_inc = pa_inc;
+// Inspired from https://github.com/AndrewJones-PSU/I2S2Test/blob/master/I2S2Test.srcs/modules/I2SInterface.sv
 
-  // phase accumulator
-  reg [c_pa_bits-1:0] pa;
-  always @(posedge clk)
-    pa <= pa[c_pa_bits-2:0] + c_pa_inc;
 
-  reg [31:0] i2s_data;
-  reg [5:0] i2s_cnt; // 6 extra bits, 5 for 32-bit data, 1 for clock
-  parameter [4:0] latch_phase = fmt ? ~0 : 0;
-  always @(posedge clk)
-  begin
-    if(pa[c_pa_bits-1])
+// This will generate all the clocks by itself from a 25MHz
+module I2Seasy(
+        input        sclk,
+        output       loutData,
+        output       lrclk,
+        output       audioclk,
+        output       bclk,
+        input [23:0] inLeft, // left signal to line out
+        input [23:0] inRight, // right signal to line out
+   );
+
+    wire [3:0]   clocks;
+
+    ecp5pll
+       #(
+         .in_hz(25000000),
+         .out0_hz(12500000), .out0_tol_hz(0),
+         .out1_hz( 6250000), .out1_tol_hz(0),
+         .out2_hz( 6250000), .out2_tol_hz(10),
+         .out3_hz( 6250000), .out3_tol_hz(0)
+       )
+    ecp5pll_inst
+       (
+        .clk_i(sclk),
+        .clk_o(clocks)
+       );
+
+    Clock_divider  clockdivider_for_lrclk
+        ( .clock_in(clocks[1]), .clock_out(lrclk), .div(64) );
+
+    assign bclk = clocks[1];
+
+    Clock_divider clockdivider_for_audioclk
+        ( .clock_in(lrclk), .clock_out(audioclk), .div(2) );
+
+    I2SInterface i2s_instance
+       (
+      .sclk(sclk),  // 25MHz
+      .bclk(clocks[1]),  // 6.25MHz
+      .lr(audioclk),         // 97.6565/2 KHz
+      .loutData(loutData),
+      .inLeft(inLeft),
+      .inRight(inRight),
+      );
+endmodule
+
+module I2SInterface(
+        input sclk, // 25 MHz System clock
+        input bclk, // 6.25 MHz Bit Clock
+        input lr, // Left/Right Channel Select
+        output loutData, // Line Out Data
+
+        input [23:0] inLeft, // left signal to line out
+        input [23:0] inRight, // right signal to line out
+
+    );
+
+    reg [63:0] outputShift;
+    reg [1:0] bclkEdge; // track the rising/falling edge of the bit clock
+    reg [1:0] lrEdge; // track the rising/falling edge of the left/right channel select
+    reg frameSync; // track the rising/falling edge of the frame sync
+
+    always @(posedge sclk)
     begin
-      if(i2s_cnt[0])
-      begin
-        if(i2s_cnt[5:1] == latch_phase)
-          i2s_data <= {l,r};
-        else
-          i2s_data[31:1] <= i2s_data[30:0];
-      end
-      i2s_cnt <= i2s_cnt + 1;
+        // frame syncing
+        if (lrEdge == 2'b10)
+            frameSync <= 1'b1;
+        else if (bclkEdge == 2'b01)
+            frameSync <= 1'b0;
+
+        // output shifting
+        if (bclkEdge == 2'b01)
+        begin
+            loutData <= outputShift[63];
+            outputShift <= {outputShift[62:0], 1'b0};
+        end
+        else if (bclkEdge == 2'b00 && frameSync == 1'b1)
+            outputShift <= {inLeft, 8'b0, inRight, 8'b0};
+
+        // edge tracking
+        bclkEdge <= {bclkEdge[0], bclk};
+        lrEdge <= {lrEdge[0], lr};
+
     end
-  end
-  assign lrck = fmt ? ~i2s_cnt[5] : i2s_cnt[5];
-  assign bck  = i2s_cnt[0];
-  assign din  = i2s_data[31]; // MSB first, but 1 bit delayed after lrck edge
 endmodule

@@ -1,3 +1,3 @@
-read -sv top.v MidiByteReader.v MidiProcessor.v MidiNoteNumberToSampleTicks.v i2s.v
+read -sv top.v MidiByteReader.v MidiProcessor.v MidiNoteNumberToSampleTicks.v i2s.v clock.v hdl/sv/ecp5pll.sv
 hierarchy -top top
 synth_ecp5 -noccu2 -nomux -nodram -json midisynth.json
