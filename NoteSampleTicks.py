@@ -1,7 +1,7 @@
 import math
 
-FREQUENCY_MHZ = 6.25
-
+FREQUENCY_MHZ = 25.0
+SAMPLE_SIZE = 1024
 FREQUENCY_HZ = FREQUENCY_MHZ * 1_000_000
 
 print("""
@@ -17,7 +17,7 @@ begin
 
 for i in range(0, 128):
     freq = 440 / 32.0 * math.pow(2, (i - 9) / 12)
-    ticks = FREQUENCY_HZ / freq / 256
+    ticks = FREQUENCY_HZ / freq / SAMPLE_SIZE
     print(f"\t\t8'h{i:02x}: noteSampleTicks <= 24'd{int(ticks)};  // {i}")
 
 print("""
