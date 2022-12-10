@@ -4,6 +4,7 @@
 // This will generate all the clocks by itself from a 25MHz
 module I2Seasy(
         input        sclk,
+        output       mclk,
         output       loutData,
         output       lrclk,
         output       audioclk,
@@ -13,13 +14,15 @@ module I2Seasy(
    );
 
     wire [3:0]   clocks;
+    wire          mclk;
+
 
     ecp5pll
        #(
-         .in_hz(25000000),
-         .out0_hz(12500000), .out0_tol_hz(0),
+         .in_hz(   25000000),
+         .out0_hz( 50000000), .out0_tol_hz(0),
          .out1_hz( 6250000), .out1_tol_hz(0),
-         .out2_hz( 6250000), .out2_tol_hz(10),
+         .out2_hz( 6250000), .out2_tol_hz(0),
          .out3_hz( 6250000), .out3_tol_hz(0)
        )
     ecp5pll_inst
@@ -28,24 +31,33 @@ module I2Seasy(
         .clk_o(clocks)
        );
 
-    Clock_divider  clockdivider_for_lrclk
-        ( .clock_in(clocks[1]), .clock_out(lrclk), .div(64) );
+   assign mclk = sclk;
 
-    assign bclk = clocks[1];
+//   assign bclk = clocks[1];
 
+
+   wire           lrclk_div_2;
+
+    Clock_divider  clockdivider_for_bclk
+        ( .clock_in(mclk), .clock_out(bclk), .div(4));
     Clock_divider clockdivider_for_audioclk
-        ( .clock_in(lrclk), .clock_out(audioclk), .div(2) );
+        ( .clock_in(bclk), .clock_out(lrclk), .div(64) );
+       Clock_divider clockdivider_for_audioclk2
+        ( .clock_in(lrclk), .clock_out(lrclk_div_2), .div(2) );
+
 
     I2SInterface i2s_instance
        (
-      .sclk(sclk),  // 25MHz
-      .bclk(clocks[1]),  // 6.25MHz
-      .lr(audioclk),         // 97.6565/2 KHz
+      .sclk(mclk),  // 25MHz
+      .bclk(bclk),  // 6.25MHz
+      .lr(lrclk_div_2),         // 48.8kHz (bclk/128)
       .loutData(loutData),
       .inLeft(inLeft),
       .inRight(inRight),
       );
 endmodule
+
+
 
 module I2SInterface(
         input sclk, // 25 MHz System clock

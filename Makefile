@@ -12,13 +12,13 @@ ulx3s_out.config: midisynth.json
 		--lpf ulx3s_v20.lpf \
 		--textcfg ulx3s_out.config
 
-MidiNoteNumberToSampleTicks.v: NoteSampleTicks.py
+MidiNoteNumberToSampleTicks.v: NoteSampleTicks.py config.py
 	python NoteSampleTicks.py > MidiNoteNumberToSampleTicks.v
 
 midisynth.json: midisynth.ys top.v clock.v MidiByteReader.v MidiNoteNumberToSampleTicks.v MidiProcessor.v i2s.v hdl/sv/ecp5pll.sv sine.mem
 	yosys midisynth.ys
 
-sine.mem: gen_sine.py
+sine.mem: gen_sine.py config.py
 	python gen_sine.py
 
 prog: ulx3s.bit

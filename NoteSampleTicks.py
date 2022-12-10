@@ -1,7 +1,6 @@
 import math
+from config import FREQUENCY_MHZ, SAMPLE_SIZE
 
-FREQUENCY_MHZ = 25.0
-SAMPLE_SIZE = 1024
 FREQUENCY_HZ = FREQUENCY_MHZ * 1_000_000
 
 print("""
