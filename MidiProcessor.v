@@ -1,11 +1,11 @@
 module MidiProcessor(
-	input			   clk,
-	input			   MIDI_RX,
-	output reg		   isNoteOn,
-	output reg [7:0]   note,
-	output reg [7:0]   modulationValue,
-	output reg [127:0] noteRegister,
-	output reg		   debug
+	input			 clk,
+	input			 MIDI_RX,
+	output reg		 isNoteOn,
+	output reg [7:0] note,
+	output reg [7:0] controllerNumber,
+	output reg [7:0] controllerValue,
+	output reg		 controllerReady
 );
 
 reg [3:0] status = 0;
@@ -15,14 +15,14 @@ reg [7:0] dataByte1 = 0;
 reg [7:0] dataByte2 = 0;
 reg [7:0] dataBytesReceivedCount = 0;
 reg isDataByteAvailable = 0;
-reg [7:0] controllerNumber = 0;
 reg [7:0] note;
+reg	controllerReady = 0;
+reg controllerNumber = 0;
+reg controllerValue = 0;
+
 
 wire isByteAvailable;
 wire [7:0] byteValue;
-
-reg [127:0] noteRegister;
-
 
 MidiByteReader midiByteReader(clk, MIDI_RX, isByteAvailable, byteValue);
 
@@ -71,7 +71,6 @@ begin
 					    begin
 								begin
 									dataBytesReceivedCount <= 0;
-								    noteRegister[dataByte0] <= 0;
 									isNoteOn <= 1'b0;
 								end
 						end
@@ -87,33 +86,28 @@ begin
 									begin
 										// Zero velocity is like Note Off
 										isNoteOn <= 1'b0;
-     								    noteRegister[dataByte0] <= 0;
 									end
 								else
 									begin
 										isNoteOn <= 1'b1;
-     								    noteRegister[dataByte0] <= 1;
 									end
 							end
 					endcase
 				4'hB:  // Controller Change
 					case (dataBytesReceivedCount)
-						1:
-							controllerNumber <= dataByte0;
+						1: begin
+						   controllerReady <= 0;
+						   controllerNumber <= dataByte0;
+						end
 						2:
 							begin
-								if (controllerNumber == 8'd1)
-									begin
-										dataBytesReceivedCount <= 0;
-										modulationValue <= dataByte1;
-									end
+							   dataBytesReceivedCount <= 0;
+							   controllerValue <= dataByte1;
+							   //controllerReady <= 1;
 							end
 					endcase
 			endcase
 		end // if (isDataByteAvailable == 1'b1)
-
-  // isNoteOn <= $countones(noteRegister) > 0;
-
 end
 
 endmodule
